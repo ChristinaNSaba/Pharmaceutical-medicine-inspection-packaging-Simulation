@@ -19,7 +19,7 @@
 #define EXPIRY_MAX_THRESHOLD 100
 #define EXPIRY_MIN_THRESHOLD 5
 #define MIN_DELAY 5
-#define MAX_DELAY 25
+#define MAX_DELAY 10
 
 pthread_mutex_t mutex;
 
@@ -35,6 +35,8 @@ typedef struct Liquid_medicine{
 
 Liquid_medicine liquid[MAX_LIQUID_BOTTLES_PER_LINE];
 int produced_liquid_medicine;
+int produced_index[MAX_LIQUID_BOTTLES_PER_LINE] = {0};
+int inspected_index[MAX_LIQUID_BOTTLES_PER_LINE] = {0};
 
 void generate_liquid_bottles(Liquid_medicine liquid){
 
@@ -91,6 +93,31 @@ void generate_liquid_bottles(Liquid_medicine liquid){
     printf("liquid level: %d\n", liquid.expiry_date_correct);
 }
 
+int check_validity(Liquid_medicine liquid){
+    //0 => false
+    //1 => true
+
+    if(liquid.level < MIN_LIQUID_LEVEL && liquid.level > MAX_LIQUID_LEVEL){
+        return 0;
+    }
+    if(liquid.is_sealed == 0){
+        return 0;
+    }
+    if(liquid.has_normal_color == 0){
+        return 0;
+    }
+    if(liquid.expiry_date_correct == 0){
+        return 0;
+    }
+    if(liquid.expiry_date_printed == 0){
+        return 0;
+    }
+    if(liquid.has_correct_label == 0){
+        return 0;
+    }
+    return 1;
+}
+
 void* production_function(void *args){
     produced_liquid_medicine = 0;
     //speed of production for each line
@@ -99,6 +126,9 @@ void* production_function(void *args){
         sleep(delay);
         generate_liquid_bottles(liquid[i]);
         produced_liquid_medicine += 1;
+        produced_index[i] = 1;
+        printf("%d liquid medicine generated successfully!\n", i);
+        printf("produced counter: %d\n", produced_liquid_medicine);
     }
 }
 
@@ -107,7 +137,27 @@ void* packagers_function(void *args){
 }
 
 void* inspectors_function(void *args){
-
+    while(produced_liquid_medicine == 0 ){
+        sleep(0.5);
+    }
+    while(produced_liquid_medicine > 0){
+        for(int i=0; i<MAX_LIQUID_BOTTLES_PER_LINE; i++){
+            if(produced_index[i] == 1){
+                pthread_mutex_lock(&mutex);
+                int is_valid = check_validity(liquid[i]);
+                if(is_valid){
+                    inspected_index[i] = 1;
+                    produced_index[i] = 0;
+                    produced_liquid_medicine --;
+                    printf("inspector function: index: %d\n", i);
+                }
+                else{
+                    produced_index[i] = 0;
+                }
+                pthread_mutex_unlock(&mutex);
+            }
+        }
+    }
 }
 
 int main(int argc, char* argv[]){
