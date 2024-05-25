@@ -1,196 +1,177 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <sys/wait.h>
-#include <time.h>
-#include <string.h>
-#include <sys/ipc.h>
-#include <signal.h>
-#include <pthread.h>
-#define MAX_LIQUID_BOTTLES_PER_LINE 100
-#define MIN_LIQUID_LEVEL 50
-#define MAX_LIQUID_LEVEL 100
-#define COLOR_MAX_THRESHOLD 100
-#define COLOR_MIN_THRESHOLD 5
-#define SEALED_MAX_THRESHOLD 200
-#define SEALED_MIN_THRESHOLD 8
-#define LABEL_MAX_THRESHOLD 100
-#define LABEL_MIN_THRESHOLD 7
-#define EXPIRY_MAX_THRESHOLD 100
-#define EXPIRY_MIN_THRESHOLD 5
-#define MIN_DELAY 5
-#define MAX_DELAY 10
+#include "header.h"
 
+Shared_Argument *shared_args;
 pthread_mutex_t mutex;
+int simulation_running = 1;
 
-typedef struct Liquid_medicine{
-    int level;
-    int has_normal_color;
-    int is_sealed;
-    int has_correct_label;
-    int expiry_date_printed;
-    int expiry_date_correct;
-    int is_valid;
-}Liquid_medicine;
+void generate_liquid_bottles(Liquid_medicine *liquid) {
+    srand(getpid()^time(NULL));
+    int min_level = shared_args->MIN_LIQUID_LEVEL - 3;
+    int max_level = shared_args->MAX_LIQUID_LEVEL + 3;
 
-Liquid_medicine liquid[MAX_LIQUID_BOTTLES_PER_LINE];
-int produced_liquid_medicine;
-int produced_index[MAX_LIQUID_BOTTLES_PER_LINE] = {0};
-int inspected_index[MAX_LIQUID_BOTTLES_PER_LINE] = {0};
-
-void generate_liquid_bottles(Liquid_medicine liquid){
-
-    //generate level
-    int min_level = MIN_LIQUID_LEVEL - 3;
-    int max_level = MAX_LIQUID_LEVEL + 3;
-
-    int liquid_level = rand() % (max_level - min_level + 1) + min_level;
-    liquid.level = liquid_level;
-
-    //generate liquid color
-    int invalid_color = rand() %(COLOR_MAX_THRESHOLD + 1);
-    if(invalid_color < COLOR_MIN_THRESHOLD){
-        liquid.has_normal_color = 0; // 0 stands for false and 1 stands for 0
-    }
-    else{
-        liquid.has_normal_color = 1; // true
-    }
-
-    //sealed the product
-    int invalid_sealed = rand() %(SEALED_MAX_THRESHOLD + 1);
-    if(invalid_sealed < SEALED_MIN_THRESHOLD){
-        liquid.is_sealed = 0; //false
-    }
-    else{
-        liquid.is_sealed = 1; //true
-    }
-
-    //generate label
-    int invalid_label = rand()%(LABEL_MAX_THRESHOLD + 1);
-    if(invalid_label < LABEL_MIN_THRESHOLD){
-        liquid.has_correct_label = 0; //false
-    }
-    else{
-        liquid.has_correct_label = 1; //true
-    }
-
-    //generate expiry date
-    int missed_expiry_date = rand() % (EXPIRY_MAX_THRESHOLD + 1);
-    if(missed_expiry_date < EXPIRY_MIN_THRESHOLD){
-        liquid.expiry_date_printed = 0; //false
-    }
-    else{
-        liquid.expiry_date_printed = 1; //true
-    }
-    int invalid_expiry_date = rand() % (EXPIRY_MAX_THRESHOLD + 1);
-    if(invalid_expiry_date < EXPIRY_MIN_THRESHOLD){
-        liquid.expiry_date_correct = 0; //false
-    }
-    else{
-        liquid.expiry_date_correct = 1; //true
-    }
-
-    printf("liquid level: %d\n", liquid.expiry_date_correct);
+    liquid->level = rand() % (max_level - min_level + 1) + min_level;
+    liquid->has_normal_color = (rand() % (shared_args->COLOR_MAX_THRESHOLD + 1) >= shared_args->COLOR_MIN_THRESHOLD) ? 1 : 0;
+    liquid->is_sealed = (rand() % (shared_args->SEALED_MAX_THRESHOLD + 1) >= shared_args->SEALED_MIN_THRESHOLD) ? 1 : 0;
+    liquid->has_correct_label = (rand() % (shared_args->LABEL_MAX_THRESHOLD + 1) >= shared_args->LABEL_MIN_THRESHOLD) ? 1 : 0;
+    liquid->expiry_date_printed = (rand() % (shared_args->EXPIRY_MAX_THRESHOLD + 1) >= shared_args->EXPIRY_MIN_THRESHOLD) ? 1 : 0;
+    liquid->expiry_date_correct = (rand() % (shared_args->EXPIRY_MAX_THRESHOLD + 1) >= shared_args->EXPIRY_MIN_THRESHOLD) ? 1 : 0;
 }
 
-int check_validity(Liquid_medicine liquid){
-    //0 => false
-    //1 => true
-
-    if(liquid.level < MIN_LIQUID_LEVEL && liquid.level > MAX_LIQUID_LEVEL){
-        return 0;
-    }
-    if(liquid.is_sealed == 0){
-        return 0;
-    }
-    if(liquid.has_normal_color == 0){
-        return 0;
-    }
-    if(liquid.expiry_date_correct == 0){
-        return 0;
-    }
-    if(liquid.expiry_date_printed == 0){
-        return 0;
-    }
-    if(liquid.has_correct_label == 0){
-        return 0;
-    }
+int check_validity(Liquid_medicine *liquid) {
+    if (liquid->level < shared_args->MIN_LIQUID_LEVEL || liquid->level > shared_args->MAX_LIQUID_LEVEL) return 0;
+    if (!liquid->is_sealed) return 0;
+    if (!liquid->has_normal_color) return 0;
+    if (!liquid->expiry_date_correct) return 0;
+    if (!liquid->expiry_date_printed) return 0;
+    if (!liquid->has_correct_label) return 0;
     return 1;
 }
 
-void* production_function(void *args){
-    produced_liquid_medicine = 0;
-    //speed of production for each line
-    int delay = rand() % (MAX_DELAY - MIN_DELAY + 1) + MIN_DELAY;
-    for(int i=0; i<MAX_LIQUID_BOTTLES_PER_LINE; i++){
+int find_number_of_bottles_inspected(SharedData *shared) {
+    int counter = 0;
+    for (int i = 0; i < shared_args->MAX_LIQUID_BOTTLES_PER_LINE; i++) {
+        if (shared->inspected_index[i] == 1) {
+            counter++;
+        }
+    }
+    return counter;
+}
+
+void* production_function(void *args) {
+    SharedData *shared = (SharedData *)args;
+    shared->produced_liquid_medicine = 0;
+    int delay = rand() % (shared_args->MAX_DELAY - shared_args->MIN_DELAY + 1) + shared_args->MIN_DELAY;
+
+    for (int i = 0; i < shared_args->MAX_LIQUID_BOTTLES_PER_LINE && shared_args->SIMULATION_DURATION * 60 >= difftime(time(NULL), shared->starting_time); i++) {
         sleep(delay);
-        generate_liquid_bottles(liquid[i]);
-        produced_liquid_medicine += 1;
-        produced_index[i] = 1;
+        generate_liquid_bottles(&shared->liquid[i]);
+        shared->produced_liquid_medicine++;
+        shared->produced_index[i] = 1;
         printf("%d liquid medicine generated successfully!\n", i);
-        printf("produced counter: %d\n", produced_liquid_medicine);
     }
+    kill(getpid(), SIGINT);
+    return NULL;
 }
 
-void* packagers_function(void *args){
-
-}
-
-void* inspectors_function(void *args){
-    while(produced_liquid_medicine == 0 ){
-        sleep(0.5);
-    }
-    while(produced_liquid_medicine > 0){
-        for(int i=0; i<MAX_LIQUID_BOTTLES_PER_LINE; i++){
-            if(produced_index[i] == 1){
+void* inspectors_function(void *args) {
+    SharedData *shared = (SharedData *)args;
+    while (simulation_running && shared_args->SIMULATION_DURATION * 60 >= difftime(time(NULL), shared->starting_time)) {
+        for (int i = 0; i < shared_args->MAX_LIQUID_BOTTLES_PER_LINE; i++) {
+            if (shared->produced_index[i] == 1) {
+                int delay = rand() % (shared_args->MAX_DELAY_FOR_INSPECTORS - shared_args->MIN_DELAY_FOR_INSPECTORS + 1) + shared_args->MIN_DELAY_FOR_INSPECTORS;
+                sleep(delay);
+                printf("Level: %d, Sealed: %d, Color: %d, Date: %d, Label: %d\n", shared->liquid[i].level, shared->liquid[i].is_sealed, shared->liquid[i].has_normal_color, shared->liquid[i].expiry_date_correct, shared->liquid[i].has_correct_label);
                 pthread_mutex_lock(&mutex);
-                int is_valid = check_validity(liquid[i]);
-                if(is_valid){
-                    inspected_index[i] = 1;
-                    produced_index[i] = 0;
-                    produced_liquid_medicine --;
-                    printf("inspector function: index: %d\n", i);
-                }
-                else{
-                    produced_index[i] = 0;
+                int is_valid = check_validity(&shared->liquid[i]);
+                if (is_valid == 1) {
+                    shared->inspected_index[i] = 1;
+                    shared->produced_index[i] = 0;
+                    shared->produced_liquid_medicine--;
+                    printf("Line %d inspected liquid item %d\n", shared->line_index, i);
+                } else {
+                    shared->produced_index[i] = 0;
+                    printf("Line %d has produced an invalid liquid item!\n", shared->line_index);
                 }
                 pthread_mutex_unlock(&mutex);
             }
         }
     }
+    return NULL;
 }
 
-int main(int argc, char* argv[]){
-    srand(time(NULL) ^ getpid());
-    if(argc != 2){
-        printf("error\n");
+void* packagers_function(void *args) {
+    SharedData *shared = (SharedData *)args;
+    int bottles_packaged = 0;
+    while (simulation_running && shared_args->SIMULATION_DURATION * 60 >= difftime(time(NULL), shared->starting_time)) {
+        pthread_mutex_lock(&mutex);
+        int bottles_inspected = find_number_of_bottles_inspected(shared);
+        if (bottles_inspected >= shared_args->BOTTLES_PER_PACKAGE) {
+            int delay = rand() % (shared_args->PACKAGING_DELAY_MAX - shared_args->PACKAGING_DELAY_MIN + 1) + shared_args->PACKAGING_DELAY_MIN;
+            sleep(delay);
+            bottles_packaged = shared_args->BOTTLES_PER_PACKAGE;
+            printf("Line %d Packaged %d bottles\n", shared->line_index, bottles_packaged);
+            // Reset the inspected index for the packaged bottles
+            int count = 0;
+            for (int i = 0; i < shared_args->MAX_LIQUID_BOTTLES_PER_LINE && count < shared_args->BOTTLES_PER_PACKAGE; i++) {
+                if (shared->inspected_index[i] == 1) {
+                    shared->inspected_index[i] = 0;
+                    count++;
+                }
+            }
+        }
+        pthread_mutex_unlock(&mutex);
+        sleep(1);  // To prevent busy-waiting
     }
-    pthread_t inspectors, packagers, production;
-    pthread_mutex_init(&mutex, NULL);
-    if(pthread_create(&inspectors, NULL, &inspectors_function, NULL) != 0){
-        printf("error in pthread create!\n");
+    kill(getppid(), SIGUSR1);
+    return NULL;
+}
+
+void signal_handler(int signal) {
+    if (signal == SIGINT) {
+        simulation_running = 0;
+    }
+}
+
+int main(int argc, char* argv[]) {
+    if (argc != 3) {
+        printf("Usage: %s <line_index>\n", argv[0]);
         return 1;
     }
-    if(pthread_create(&packagers, NULL, &packagers_function, NULL) != 0){
-        printf("error in pthread create!\n");
+
+    // Attach to shared memory
+    int shared_memory_id = shmget(SHM_KEY, SHM_SIZE, 0666);
+    if (shared_memory_id == -1) {
+        perror("shmget");
+        return 1;
+    }
+
+    shared_args = (Shared_Argument *)shmat(shared_memory_id, NULL, 0);
+    if (shared_args == (void *)-1) {
+        perror("shmat");
+        return 1;
+    }
+
+    signal(SIGINT, signal_handler);
+
+    pthread_t inspectors, packagers, production;
+    pthread_mutex_init(&mutex, NULL);
+
+    SharedData shared;
+    memset(&shared, 0, sizeof(SharedData));  // Initialize the shared struct to zero
+
+    shared.line_index = atoi(argv[1]);  // Set the line_index after initializing shared
+    shared.starting_time = time(NULL);
+
+    if (pthread_create(&inspectors, NULL, inspectors_function, &shared) != 0) {
+        printf("Error in pthread create (inspectors)!\n");
+        return 1;
+    }
+    if (pthread_create(&packagers, NULL, packagers_function, &shared) != 0) {
+        printf("Error in pthread create (packagers)!\n");
         return 2;
     }
-    if(pthread_create(&production, NULL, &production_function, NULL) != 0){
-        printf("error in pthread create!\n");
+    if (pthread_create(&production, NULL, production_function, &shared) != 0) {
+        printf("Error in pthread create (production)!\n");
         return 3;
     }
-    if(pthread_join(inspectors, NULL) != 0){
-        printf("error in pthread join!\n");
+
+    if (pthread_join(production, NULL) != 0) {
+        printf("Error in pthread join (production)!\n");
         return 4;
     }
-    if(pthread_join(packagers, NULL) != 0){
-        printf("error in pthread join!\n");
+
+    // Allow inspectors and packagers to finish
+    sleep(2);
+
+    if (pthread_join(inspectors, NULL) != 0) {
+        printf("Error in pthread join (inspectors)!\n");
         return 5;
     }
-    if(pthread_join(production, NULL) != 0){
-        printf("error in pthread join!\n");
+    if (pthread_join(packagers, NULL) != 0) {
+        printf("Error in pthread join (packagers)!\n");
         return 6;
     }
+
     pthread_mutex_destroy(&mutex);
     return 0;
 }
