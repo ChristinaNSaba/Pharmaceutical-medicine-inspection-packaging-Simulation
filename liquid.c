@@ -60,12 +60,12 @@ void* inspectors_function(void *args) {
     srand(getpid()^time(NULL));
     SharedData *shared = (SharedData *)args;
     while (simulation_running && shared_args->SIMULATION_DURATION * 60 >= difftime(time(NULL), shared->starting_time)) {
+        pthread_mutex_lock(&mutex);
         for (int i = 0; i < shared_args->MAX_LIQUID_BOTTLES_PER_LINE; i++) {
             if (shared->produced_index[i] == 1) {
                 int delay = rand() % (shared_args->MAX_DELAY_FOR_INSPECTORS - shared_args->MIN_DELAY_FOR_INSPECTORS + 1) + shared_args->MIN_DELAY_FOR_INSPECTORS;
                 sleep(delay);
                 printf("Level: %d, Sealed: %d, Color: %d, Date: %d, Label: %d\n", shared->liquid[i].level, shared->liquid[i].is_sealed, shared->liquid[i].has_normal_color, shared->liquid[i].expiry_date_correct, shared->liquid[i].has_correct_label);
-                pthread_mutex_lock(&mutex);
                 int is_valid = check_validity(&shared->liquid[i]);
                 if (is_valid == 1) {
                     shared->inspected_index[i] = 1;
@@ -76,9 +76,9 @@ void* inspectors_function(void *args) {
                     shared->produced_index[i] = 0;
                     printf("Line %d has produced an invalid liquid item!\n", shared->line_index);
                 }
-                pthread_mutex_unlock(&mutex);
             }
         }
+        pthread_mutex_unlock(&mutex);
     }
     return NULL;
 }
@@ -155,7 +155,7 @@ void signal_handler(int signal) {
 
 int main(int argc, char* argv[]) {
     srand(getpid() ^ time(NULL));
-    if (argc != 2) {
+    if (argc != 3) {
         printf("Usage: %s <line_index>\n", argv[0]);
         return 1;
     }
@@ -178,8 +178,8 @@ int main(int argc, char* argv[]) {
     pthread_mutex_init(&mutex, NULL);
 
     SharedData shared;
-    memset(&shared, 0, sizeof(SharedData)); 
-    shared.line_index = atoi(argv[1]);  
+    memset(&shared, 0, sizeof(SharedData));
+    shared.line_index = atoi(argv[1]);
     shared.starting_time = time(NULL);
 
     // Create multiple inspector threads
