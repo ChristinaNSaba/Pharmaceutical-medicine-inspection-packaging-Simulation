@@ -3,6 +3,9 @@
 Shared_Argument *shared_args;
 pthread_mutex_t mutex;
 int simulation_running = 1;
+int bottles_packaged;
+int produced_liquid_medicine;
+int production_line;
 
 void generate_liquid_bottles(Liquid_medicine *liquid) {
     srand(getpid()^time(NULL));
@@ -40,14 +43,16 @@ int find_number_of_bottles_inspected(SharedData *shared) {
 void* production_function(void *args) {
     srand(getpid()^time(NULL));
     SharedData *shared = (SharedData *)args;
-    shared->produced_liquid_medicine = 0;
+    shared->produced_liquid_medicine[shared->] = 0;
+    produced_liquid_medicine = 0;
     int delay = rand() % (shared_args->MAX_DELAY - shared_args->MIN_DELAY + 1) + shared_args->MIN_DELAY;
 
     for (int i = 0; i < shared_args->MAX_LIQUID_BOTTLES_PER_LINE && shared_args->SIMULATION_DURATION * 60 >= difftime(time(NULL), shared->starting_time); i++) {
         sleep(delay);
         pthread_mutex_lock(&mutex);
         generate_liquid_bottles(&shared->liquid[i]);
-        shared->produced_liquid_medicine++;
+        shared->produced_liquid_medicine[shared->line_index]++;
+        produced_liquid_medicine++;
         shared->produced_index[i] = 1;
         pthread_mutex_unlock(&mutex);
         printf("%d liquid medicine generated successfully!\n", i);
@@ -70,7 +75,6 @@ void* inspectors_function(void *args) {
                 if (is_valid == 1) {
                     shared->inspected_index[i] = 1;
                     shared->produced_index[i] = 0;
-                    shared->produced_liquid_medicine--;
                     printf("Line %d inspected liquid item %d\n", shared->line_index, i);
                 } else {
                     shared->produced_index[i] = 0;
@@ -116,42 +120,14 @@ void signal_handler(int signal) {
     }
 }
 
-//void* manager_function(void *args) {
-//    SharedData *shared_lines = (SharedData *)args;
-//    int line_count = shared_args->NUM_OF_PRODUCTION_LINES;
-//
-//    while (simulation_running) {
-//        sleep(5);  // Check every 5 seconds
-//
-//        // Find the slowest and fastest lines
-//        int slowest_line = -1, fastest_line = -1;
-//        int min_production = INT_MAX, max_production = 0;
-//
-//        pthread_mutex_lock(&mutex);
-//        for (int i = 0; i < line_count; i++) {
-//            if (shared_lines[i].produced_liquid_medicine < min_production) {
-//                min_production = shared_lines[i].produced_liquid_medicine;
-//                slowest_line = i;
-//            }
-//            if (shared_lines[i].produced_liquid_medicine > max_production) {
-//                max_production = shared_lines[i].produced_liquid_medicine;
-//                fastest_line = i;
-//            }
-//        }
-//
-//        // Check if the difference exceeds the threshold
-//        if (fastest_line != -1 && slowest_line != -1 && (max_production - min_production > shared_args->PRODUCTION_THRESHOLD)) {
-//            printf("Adjusting: slowing down line %d and speeding up line %d\n", fastest_line, slowest_line);
-//            // Adjust delays (simplified example, real adjustment would need finer control)
-//            for (int i = 0; i < shared_args->MAX_LIQUID_BOTTLES_PER_LINE; i++) {
-//                shared_lines[fastest_line].produced_index[i] = 0; // Simulating slowing down
-//                shared_lines[slowest_line].produced_index[i] = 1; // Simulating speeding up
-//            }
-//        }
-//        pthread_mutex_unlock(&mutex);
-//    }
-//    return NULL;
-//}
+void* manager_function(void *args) {
+    SharedData *shared = (SharedData *)args;
+    while(simulation_running){
+        shared->checkers[production_line] = produced_liquid_medicine - bottles_packaged;
+        for(int i=0; i< shared->)
+    }
+}
+
 
 int main(int argc, char* argv[]) {
     srand(getpid() ^ time(NULL));
@@ -180,6 +156,7 @@ int main(int argc, char* argv[]) {
     SharedData shared;
     memset(&shared, 0, sizeof(SharedData));
     shared.line_index = atoi(argv[1]);
+    production_line = atoi(argv[1]);
     shared.starting_time = time(NULL);
 
     // Create multiple inspector threads
@@ -207,8 +184,19 @@ int main(int argc, char* argv[]) {
         return 3;
     }
 
+    pthread_t manager;
+    if(pthread_create(&manager, NULL, manager_function, &shared) != 0){
+        printf("Error in pthread create (production)!\n");
+        return 7;
+    }
+
     if (pthread_join(production, NULL) != 0) {
         printf("Error in pthread join (production)!\n");
+        return 4;
+    }
+
+    if (pthread_join(manager, NULL) != 0) {
+        printf("Error in pthread join (manager)!\n");
         return 4;
     }
 
