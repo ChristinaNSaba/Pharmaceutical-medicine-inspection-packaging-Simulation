@@ -34,6 +34,8 @@ typedef struct {
     int MAX_DELAY_FOR_INSPECTORS;
     int PACKAGING_DELAY_MIN;
     int PACKAGING_DELAY_MAX;
+    int NUM_INSPECTORS;  // Number of inspector threads
+    int NUM_PACKAGERS;   // Number of packager threads
 } Shared_Argument;
 
 extern Shared_Argument *shared_args;
@@ -51,10 +53,12 @@ typedef struct {
 } Liquid_medicine;
 
 typedef struct {
-    Liquid_medicine liquid[100]; // Placeholder size, update with appropriate size
-    int produced_liquid_medicine;
-    int produced_index[100];
-    int inspected_index[100];
+    Liquid_medicine liquid[1000];
+    int produced_liquid_medicine[1000];
+    int produced_index[1000];
+    int inspected_index[1000];
     int line_index;
     time_t starting_time;
+    int checkers[1000];
+    int packager_workers[100];
 } SharedData;
