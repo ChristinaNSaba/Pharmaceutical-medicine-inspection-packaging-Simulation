@@ -68,6 +68,9 @@ int main() {
     int pills_size = shared_argument->NUM_OF_PRODUCTION_LINES - liquid_size;
     printf("liquid size: %d\n", liquid_size);
     printf("pills size: %d\n", pills_size);
+    for(int i=0; i<shared_argument->NUM_OF_PRODUCTION_LINES; i++){
+        shared_argument->NUM_OF_WORKERS[i] = NUM_OF_WORKERS_FOR_EACH_LINE;
+    }
 
     for (int i = 0; i < liquid_size; i++) {
         pid_t pid = fork();
@@ -78,9 +81,12 @@ int main() {
             perror("error in exec!");
             exit(EXIT_FAILURE);
         }
+        else{
+            shared_argument->production_line_pid[i] = pid;
+        }
     }
 
-    for (int i = 0; i < pills_size; i++) {
+    for (int i = liquid_size; i < pills_size + liquid_size; i++) {
         pid_t pid = fork();
         if (pid == 0) {
             sprintf(production_line_index_str, "%d", i);

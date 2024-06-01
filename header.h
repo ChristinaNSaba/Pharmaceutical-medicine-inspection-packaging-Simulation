@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -12,6 +11,8 @@
 // Constants and shared memory key
 #define SHM_KEY 1234
 #define SHM_SIZE 1024
+#define SWITCH_THRESHOLD 7
+#define NUM_OF_WORKERS_FOR_EACH_LINE 1
 
 typedef struct {
     int NUM_OF_PRODUCTION_LINES;
@@ -34,8 +35,10 @@ typedef struct {
     int MAX_DELAY_FOR_INSPECTORS;
     int PACKAGING_DELAY_MIN;
     int PACKAGING_DELAY_MAX;
-    int NUM_INSPECTORS;  // Number of inspector threads
-    int NUM_PACKAGERS;   // Number of packager threads
+    int production_speed[100];
+    int production_line_pid[100];
+    time_t starting_time[100];
+    int NUM_OF_WORKERS[100];
 } Shared_Argument;
 
 extern Shared_Argument *shared_args;
@@ -51,14 +54,3 @@ typedef struct {
     int expiry_date_correct;
     int is_valid;
 } Liquid_medicine;
-
-typedef struct {
-    Liquid_medicine liquid[1000];
-    int produced_liquid_medicine[1000];
-    int produced_index[1000];
-    int inspected_index[1000];
-    int line_index;
-    time_t starting_time;
-    int checkers[1000];
-    int packager_workers[100];
-} SharedData;
