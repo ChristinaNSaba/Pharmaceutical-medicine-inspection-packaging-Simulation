@@ -6,9 +6,9 @@ int simulation_running = 1;
 int pills_packaged;
 int produced_pills;
 int production_line;
-int line_index;
-int produced_index[1000];
-int inspected_index[1000];
+int line_index_pills;
+int produced_index_pills[1000];
+int inspected_index_pills[1000];
 Pill pills[1000];
 
 void generate_pills(Pill *pill) {
@@ -32,7 +32,7 @@ int check_validity(Pill *pill) {
 int find_number_of_pills_inspected() {
     int counter = 0;
     for (int i = 0; i < shared_args->MAX_PILL_CONTAINERS_PER_LINE; i++) {
-        if (inspected_index[i] == 1) {
+        if (inspected_index_pills[i] == 1) {
             counter++;
         }
     }
@@ -71,7 +71,7 @@ void* inspectors_function(void *args) {
     SharedData *shared = (SharedData *)args;
     while (simulation_running && shared_args->SIMULATION_DURATION * 60 >= difftime(time(NULL), shared->starting_time)) {
         for (int i = 0; i < shared_args->MAX_PILL_CONTAINERS_PER_LINE; i++) {
-            if (shared->produced_index[i] == 1 && inspected_index[i] == 0) {
+            if (shared->produced_index_pills[i] == 1 && inspected_index_pills[i] == 0) {
                 pthread_mutex_lock(&mutex);
                 int delay = rand() % (shared_args->MAX_DELAY_FOR_INSPECTORS - shared_args->MIN_DELAY_FOR_INSPECTORS + 1) + shared_args->MIN_DELAY_FOR_INSPECTORS;
                 pthread_mutex_unlock(&mutex); // Unlock before sleep
@@ -79,10 +79,10 @@ void* inspectors_function(void *args) {
                 pthread_mutex_lock(&mutex); // Lock after sleep
                 int is_valid = check_validity(&shared->pills[i]);
                 if (is_valid == 1) {
-                    inspected_index[i] = 1;
-                    printf("Line %d inspected pill container %d\n", line_index, i);
+                    inspected_index_pills[i] = 1;
+                    printf("Line %d inspected pill container %d\n", line_index_pills, i);
                 } else {
-                    printf("Line %d has produced an invalid pill container!\n", line_index);
+                    printf("Line %d has produced an invalid pill container!\n", line_index_pills);
                 }
                 pthread_mutex_unlock(&mutex);
             }
@@ -99,10 +99,10 @@ void* packagers_function(void *args) {
             int delay = rand() % (shared_args->PACKAGING_DELAY_MAX - shared_args->PACKAGING_DELAY_MIN + 1) + shared_args->PACKAGING_DELAY_MIN;
             sleep(delay);
             pills_packaged += 1;
-            printf("Line %d Packaged a pill container\n", line_index);
+            printf("Line %d Packaged a pill container\n", line_index_pills);
             for (int i = 0; i < shared_args->MAX_PILL_CONTAINERS_PER_LINE; i++) {
-                if (inspected_index[i] == 1) {
-                    inspected_index[i] = 0;
+                if (inspected_index_pills[i] == 1) {
+                    inspected_index_pills[i] = 0;
                     break;
                 }
             }
@@ -112,7 +112,7 @@ void* packagers_function(void *args) {
 }
 
 void* manager_function(void *args) {
-    while (simulation_running && shared_args->SIMULATION_DURATION * 60 >= difftime(time(NULL), shared_args->starting_time[line_index])) {
+    while (simulation_running && shared_args->SIMULATION_DURATION * 60 >= difftime(time(NULL), shared_args->starting_time[line_index_pills])) {
         for (int i = 0; i < shared_args->NUM_OF_PRODUCTION_LINES; i++) {
             int min_speed_index = find_minimum_speed();
             if (shared_args->production_speed[i] >= SWITCH_THRESHOLD ) {
@@ -123,6 +123,7 @@ void* manager_function(void *args) {
     }
     return NULL;
 }
+
 void delete_thread(int signal) {
     srand(getpid() ^ time(NULL));
 
@@ -166,8 +167,8 @@ int main(int argc, char* argv[]) {
 
     pthread_mutex_init(&mutex, NULL);
 
-    line_index = atoi(argv[1]);
-    production_line = atoi(argv[1]);
+    line_index_pills = atoi(argv[1]);
+    production_line= atoi(argv[1]);
     SharedData shared_data;
     shared_data.produced_pills = 0;
     shared_data.starting_time = time(NULL);
