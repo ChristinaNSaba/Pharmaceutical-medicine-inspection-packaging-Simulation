@@ -1,28 +1,23 @@
-
-
-#ifndef HEADER_H
-#define HEADER_H
-
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
+#include <unistd.h>
+#include <pthread.h>
+#include <signal.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <unistd.h>
-#include <signal.h>
 #include <time.h>
+#include <string.h>
 
+// Constants and shared memory key
 #define SHM_KEY 1234
-#define SHM_SIZE sizeof(Shared_Argument)
-#define SWITCH_THRESHOLD 10
+#define SHM_SIZE 1024
+#define SWITCH_THRESHOLD 3
+#define NUM_OF_WORKERS_FOR_EACH_LINE 1
+
 typedef struct {
     int NUM_OF_PRODUCTION_LINES;
     int MAX_LIQUID_BOTTLES_PER_LINE;
-    int MAX_PILL_CONTAINERS_PER_LINE;
     int BOTTLES_PER_PACKAGE;
-    int PILL_CONTAINERS_PER_PACKAGE;
     int SIMULATION_DURATION;
     int MIN_LIQUID_LEVEL;
     int MAX_LIQUID_LEVEL;
@@ -40,6 +35,12 @@ typedef struct {
     int MAX_DELAY_FOR_INSPECTORS;
     int PACKAGING_DELAY_MIN;
     int PACKAGING_DELAY_MAX;
+    int produced_liquid_medicine[100];
+    int bottles_packaged[100];
+    int production_speed[100];
+    int production_line_pid[100];
+    time_t starting_time[100];
+    int NUM_OF_WORKERS[100];
 } Shared_Argument;
 
 extern Shared_Argument *shared_args;
@@ -55,31 +56,3 @@ typedef struct {
     int expiry_date_correct;
     int is_valid;
 } Liquid_medicine;
-
-typedef struct {
-    int count;
-    int has_normal_color;
-    int is_sealed;
-    int has_correct_label;
-    int has_correct_size;
-    int expiry_date_printed;
-    int expiry_date_correct;
-    int is_valid;
-} Pill;
-
-typedef struct {
-    Liquid_medicine liquid[100];
-    Pill pills[100];
-    int produced_liquid_medicine;
-    int produced_pills;
-    int produced_index_pills[200];
-    int inspected_index_pills[200];
-    int line_index_pills;
-    int produced_index[200];
-    int inspected_index[200];
-    int line_index;
-    time_t starting_time;
-} SharedData;
-
-#endif // HEADER_H
-

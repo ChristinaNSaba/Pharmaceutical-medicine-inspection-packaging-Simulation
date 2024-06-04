@@ -4,7 +4,6 @@ Shared_Argument *shared_args;
 pthread_mutex_t mutex;
 int simulation_running = 1;
 int bottles_packaged;
-int produced_liquid_medicine;
 int production_line;
 int line_index;
 int produced_index[1000];
@@ -59,17 +58,17 @@ int find_minimum_speed() {
 void* production_function(void *args) {
     int local_line_index = *(int *)args;
     srand(getpid() ^ time(NULL));
-    produced_liquid_medicine = 0;
+    shared_args->produced_liquid_medicine[production_line] = 0;
     int delay = rand() % (shared_args->MAX_DELAY - shared_args->MIN_DELAY + 1) + shared_args->MIN_DELAY;
 
     for (int i = 0; i < shared_args->MAX_LIQUID_BOTTLES_PER_LINE && shared_args->SIMULATION_DURATION * 60 >= difftime(time(NULL), shared_args->starting_time[local_line_index]); i++) {
         sleep(delay);
         pthread_mutex_lock(&mutex);
         generate_liquid_bottles(&liquid[i]);
-        produced_liquid_medicine++;
+        shared_args->produced_liquid_medicine[production_line]++;
         produced_index[i] = 1;
         pthread_mutex_unlock(&mutex);
-        printf("%d liquid medicine generated successfully!\n", i);
+        printf("%d liquid medicine generated successfully by line %d!\n", i, production_line);
     }
     return NULL;
 }
@@ -105,7 +104,7 @@ void* inspectors_function(void *args) {
 void* packagers_function(void *args) {
     int local_line_index = *(int *)args;
     srand(getpid() ^ time(NULL));
-    bottles_packaged = 0;
+    shared_args->bottles_packaged[production_line] = 0;
     while (simulation_running && shared_args->SIMULATION_DURATION * 60 >= difftime(time(NULL), shared_args->starting_time[local_line_index])) {
         pthread_mutex_lock(&mutex);
         int bottles_inspected = find_number_of_bottles_inspected();
@@ -114,9 +113,8 @@ void* packagers_function(void *args) {
             pthread_mutex_unlock(&mutex); // Unlock before sleep
             sleep(delay);
             pthread_mutex_lock(&mutex); // Lock after sleep
-            bottles_packaged += 1;
+            shared_args->bottles_packaged[production_line] += 1;
             printf("Line %d Packaged a bottle and added folded prescription\n", local_line_index);
-            shared_args->production_speed[local_line_index] = produced_liquid_medicine - bottles_packaged;
             int flag = 0;
             for (int i = 0; i < shared_args->MAX_LIQUID_BOTTLES_PER_LINE && flag == 0; i++) {
                 if (inspected_index[i] == 1) {
@@ -139,11 +137,19 @@ void signal_handler(int signal) {
 
 void* manager_function(void *args) {
     while (simulation_running && shared_args->SIMULATION_DURATION * 60 >= difftime(time(NULL), shared_args->starting_time[line_index])) {
+        sleep(10);
+        shared_args->production_speed[production_line] = shared_args->produced_liquid_medicine[production_line] - shared_args->bottles_packaged[production_line];
+        printf("speed of production line %d is %d\n", production_line, shared_args->production_speed[production_line]);
         for (int i = 0; i < shared_args->NUM_OF_PRODUCTION_LINES; i++) {
+//            sleep(10);
+//            printf("speed of production line %d is %d\n", production_line, shared_args->production_speed[i]);
             int min_speed_index = find_minimum_speed();
+            printf("min speed of %d is %d\n", min_speed_index, shared_args->production_speed[min_speed_index]);
             if (shared_args->production_speed[i] >= SWITCH_THRESHOLD ) {
                 kill(shared_args->production_line_pid[i], SIGUSR1);
                 kill(shared_args->production_line_pid[min_speed_index], SIGUSR2);
+                printf("worker from line %d switched to line %d\n", min_speed_index, i);
+                return NULL;
             }
         }
     }
