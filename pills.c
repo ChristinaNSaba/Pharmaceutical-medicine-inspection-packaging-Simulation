@@ -126,10 +126,10 @@ void signal_handler1(int signal) {
         simulation_running = 0;
     }
 }
-void create_new_thread1(int signal) {
+/*void create_new_thread1(int signal) {
 
     pthread_t new_packager_worker;
-    if (pthread_create(&new_packager_worker, NULL, production_function, &line_index) != 0) {
+    if (pthread_create(&new_packager_worker, NULL, production_function, &local_line_index) != 0) {
         printf("Error in pthread create (packager)!\n");
     }
 }
@@ -146,7 +146,7 @@ void delete_thread1(int signal) {
 
     pthread_mutex_unlock(&mutex);
 }
-
+*/
 int main(int argc, char *argv[]) {
     if (argc < 2) {
         fprintf(stderr, "Usage: %s <number_of_lines>\n", argv[0]);
