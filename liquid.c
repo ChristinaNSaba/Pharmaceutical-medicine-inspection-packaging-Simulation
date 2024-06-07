@@ -68,6 +68,7 @@ void* production_function(void *args) {
         generate_liquid_bottles(&liquid[i]);
         shared_args->produced_liquid_medicine[production_line]++;
         produced_index[i] = 1;
+        shared_args->produced_index[i] = 1;
         pthread_mutex_unlock(&mutex);
         printf("%d liquid medicine generated successfully by line %d!\n", i, production_line);
     }
