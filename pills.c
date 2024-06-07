@@ -13,12 +13,17 @@ int simulation_running = 1;
 
 void generate_pills(Pill_Container *pill) {
     pill->count = rand() % 30 + 1; // Generate pill count between 1 and 30
-    pill->has_normal_color = (rand() % 2);
-    pill->is_sealed = (rand() % 2);
-    pill->has_correct_label = (rand() % 2);
-    pill->expiry_date_printed = (rand() % 2);
-    pill->expiry_date_correct = (rand() % 2);
-    printf("Generated pills with count: %d\n", pill->count);
+
+    // Increase probability of generating valid pills
+    pill->has_normal_color = (rand() % 10 < 8); // 80% chance to have normal color
+    pill->is_sealed = (rand() % 10 < 9); // 90% chance to be sealed
+    pill->has_correct_label = (rand() % 10 < 9); // 90% chance to have correct label
+    pill->expiry_date_printed = (rand() % 10 < 8); // 80% chance to have expiry date printed
+    pill->expiry_date_correct = (rand() % 10 < 8); // 80% chance to have correct expiry date
+
+    printf("Generated pills with count: %d, sealed: %d, normal color: %d, correct label: %d, expiry printed: %d, expiry correct: %d\n",
+           pill->count, pill->is_sealed, pill->has_normal_color, pill->has_correct_label,
+           pill->expiry_date_printed, pill->expiry_date_correct);
 }
 
 int check_validity1(Pill_Container *pill) {
@@ -28,7 +33,7 @@ int check_validity1(Pill_Container *pill) {
 
 void* production_function1(void *args) {
     int local_line_index = *(int *)args;
-    srand(time(NULL) ^ getpid());
+    srand(time(NULL) ^ (local_line_index + getpid()));
     shared_args->produced_pills[local_line_index] = 0;
     int delay = rand() % (shared_args->MAX_DELAY - shared_args->MIN_DELAY + 1) + shared_args->MIN_DELAY;
 
@@ -49,7 +54,7 @@ void* production_function1(void *args) {
 
 void* inspectors_function1(void *args) {
     int local_line_index = *(int *)args;
-    srand(time(NULL) ^ getpid());
+    srand(time(NULL) ^ (local_line_index + getpid()));
     printf("Inspector function started for line %d\n", local_line_index);
 
     while (simulation_running) {
@@ -64,7 +69,7 @@ void* inspectors_function1(void *args) {
                 if (is_valid) {
                     shared_args->inspected_index[local_line_index][i] = 1;
                     shared_args->produced_index[local_line_index][i] = 0;
-                    printf("Line %d inspected pill container %d\n", local_line_index, i);
+                    printf("Line %d inspected pill container %d and it is valid.\n", local_line_index, i);
                 } else {
                     shared_args->produced_index[local_line_index][i] = 0;
                     printf("Line %d has produced an invalid pill container!\n", local_line_index);
@@ -79,7 +84,7 @@ void* inspectors_function1(void *args) {
 
 void* packagers_function1(void *args) {
     int local_line_index = *(int *)args;
-    srand(time(NULL) ^ getpid());
+    srand(time(NULL) ^ (local_line_index + getpid()));
     shared_args->pills_packaged[local_line_index] = 0;
 
     printf("Packager function started for line %d\n", local_line_index);
@@ -126,27 +131,7 @@ void signal_handler1(int signal) {
         simulation_running = 0;
     }
 }
-/*void create_new_thread1(int signal) {
 
-    pthread_t new_packager_worker;
-    if (pthread_create(&new_packager_worker, NULL, production_function, &local_line_index) != 0) {
-        printf("Error in pthread create (packager)!\n");
-    }
-}
-
-void delete_thread1(int signal) {
-    srand(getpid() ^ time(NULL));
-
-    int selected_thread_index = -1;
-    int flag = -1;
-
-    pthread_mutex_lock(&mutex);
-
-    shared_args->NUM_OF_WORKERS[production_line] --;
-
-    pthread_mutex_unlock(&mutex);
-}
-*/
 int main(int argc, char *argv[]) {
     if (argc < 2) {
         fprintf(stderr, "Usage: %s <number_of_lines>\n", argv[0]);
