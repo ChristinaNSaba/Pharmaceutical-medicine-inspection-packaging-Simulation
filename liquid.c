@@ -184,12 +184,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // Attach to shared memory
-    int shared_memory_id = shmget(SHM_KEY, SHM_SIZE, 0666);
-    if (shared_memory_id == -1) {
-        perror("shmget");
-        return 1;
-    }
+    int shared_memory_id = atoi(argv[2]);
 
     shared_args = (Shared_Argument *)shmat(shared_memory_id, NULL, 0);
     if (shared_args == (void *)-1) {
