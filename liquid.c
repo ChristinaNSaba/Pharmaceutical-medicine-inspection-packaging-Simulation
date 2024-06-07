@@ -9,6 +9,7 @@ int line_index;
 int produced_index[1000];
 int inspected_index[1000];
 Liquid_medicine liquid[1000];
+int invalid_counter[100];
 
 void generate_liquid_bottles(Liquid_medicine *liquid) {
     srand(getpid() ^ time(NULL));
@@ -76,6 +77,7 @@ void* production_function(void *args) {
 void* inspectors_function(void *args) {
     int local_line_index = *(int *)args;
     srand(getpid() ^ time(NULL));
+    invalid_counter[production_line] = 0;
     while (simulation_running && shared_args->SIMULATION_DURATION * 60 >= difftime(time(NULL), shared_args->starting_time[local_line_index])) {
         pthread_mutex_lock(&mutex);
         for (int i = 0; i < shared_args->MAX_LIQUID_BOTTLES_PER_LINE; i++) {
@@ -93,6 +95,7 @@ void* inspectors_function(void *args) {
                 } else {
                     produced_index[i] = 0;
                     printf("Line %d has produced an invalid liquid item!\n", local_line_index);
+                    invalid_counter[production_line] ++;
                 }
             }
         }
@@ -136,20 +139,26 @@ void signal_handler(int signal) {
 }
 
 void* manager_function(void *args) {
+    int counter_of_invalid = 0;
     while (simulation_running && shared_args->SIMULATION_DURATION * 60 >= difftime(time(NULL), shared_args->starting_time[line_index])) {
         sleep(10);
         shared_args->production_speed[production_line] = shared_args->produced_liquid_medicine[production_line] - shared_args->bottles_packaged[production_line];
         printf("speed of production line %d is %d\n", production_line, shared_args->production_speed[production_line]);
         for (int i = 0; i < shared_args->NUM_OF_PRODUCTION_LINES; i++) {
-//            sleep(10);
-//            printf("speed of production line %d is %d\n", production_line, shared_args->production_speed[i]);
             int min_speed_index = find_minimum_speed();
-            printf("min speed of %d is %d\n", min_speed_index, shared_args->production_speed[min_speed_index]);
             if (shared_args->production_speed[i] >= SWITCH_THRESHOLD ) {
+                pthread_mutex_lock(&mutex);
+                shared_args->NUM_OF_WORKERS[production_line] --;
                 kill(shared_args->production_line_pid[i], SIGUSR1);
                 kill(shared_args->production_line_pid[min_speed_index], SIGUSR2);
+                shared_args->production_speed[i] = 0;
                 printf("worker from line %d switched to line %d\n", min_speed_index, i);
+                pthread_mutex_unlock(&mutex);
                 return NULL;
+            }
+            counter_of_invalid += invalid_counter[i];
+            if(counter_of_invalid >= NUM_OF_INVALID){
+                simulation_running = 0;
             }
         }
     }
